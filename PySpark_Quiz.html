@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PySpark Deep Dive Quiz</title>
+<style>
+  :root{
+    --navy:#0B2545;
+    --navy2:#13315C;
+    --panel:#132C52;
+    --panel-border:#234573;
+    --orange:#E2601C;
+    --orange-light:#F5A25A;
+    --text:#EAF2FA;
+    --muted:#9FB4CE;
+    --green:#2FA84F;
+    --green-bg:#123322;
+    --red:#D14343;
+    --red-bg:#3A1620;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;
+    background:var(--navy);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh;
+  }
+  body{
+    display:flex;
+    justify-content:center;
+    padding:32px 16px 60px;
+  }
+  .app{
+    width:100%;
+    max-width:760px;
+  }
+  header{
+    text-align:center;
+    margin-bottom:28px;
+  }
+  .kicker{
+    color:var(--orange-light);
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    margin-bottom:8px;
+  }
+  h1{
+    font-size:26px;
+    margin:0 0 8px;
+    font-weight:800;
+  }
+  .subtitle{
+    color:var(--muted);
+    font-size:14px;
+    margin:0;
+  }
+
+  /* progress */
+  .progress-wrap{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    margin:26px 0 22px;
+  }
+  .progress-track{
+    flex:1;
+    height:8px;
+    background:var(--panel);
+    border-radius:99px;
+    overflow:hidden;
+    border:1px solid var(--panel-border);
+  }
+  .progress-fill{
+    height:100%;
+    background:linear-gradient(90deg,var(--orange),var(--orange-light));
+    border-radius:99px;
+    transition:width .35s ease;
+    width:0%;
+  }
+  .progress-label{
+    font-size:13px;
+    color:var(--muted);
+    white-space:nowrap;
+    min-width:78px;
+    text-align:right;
+  }
+  .score-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    color:var(--orange-light);
+    font-weight:700;
+    font-size:13px;
+    padding:6px 12px;
+    border-radius:99px;
+    white-space:nowrap;
+  }
+
+  /* card */
+  .card{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:16px;
+    padding:28px;
+    box-shadow:0 20px 40px rgba(0,0,0,.25);
+  }
+  .q-number{
+    color:var(--orange);
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    margin-bottom:10px;
+  }
+  .q-prompt{
+    font-size:19px;
+    line-height:1.45;
+    font-weight:700;
+    margin:0 0 22px;
+    color:var(--text);
+  }
+  .options{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .option{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    text-align:left;
+    background:var(--navy2);
+    border:1.5px solid var(--panel-border);
+    color:var(--text);
+    padding:14px 16px;
+    border-radius:12px;
+    font-size:15px;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease, transform .1s ease;
+  }
+  .option:hover:not(:disabled){
+    border-color:var(--orange-light);
+    transform:translateY(-1px);
+  }
+  .option-letter{
+    flex:0 0 26px;
+    height:26px;
+    border-radius:50%;
+    background:rgba(255,255,255,.08);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:12px;
+    font-weight:700;
+    color:var(--muted);
+  }
+  .option.selected{
+    border-color:var(--orange);
+    background:rgba(226,96,28,.12);
+  }
+  .option.correct{
+    border-color:var(--green);
+    background:var(--green-bg);
+  }
+  .option.correct .option-letter{ background:var(--green); color:#fff; }
+  .option.incorrect{
+    border-color:var(--red);
+    background:var(--red-bg);
+  }
+  .option.incorrect .option-letter{ background:var(--red); color:#fff; }
+  .option:disabled{ cursor:default; }
+
+  .feedback{
+    margin-top:18px;
+    padding:14px 16px;
+    border-radius:12px;
+    font-size:14px;
+    line-height:1.5;
+    display:none;
+  }
+  .feedback.show{ display:block; animation:fadeIn .25s ease; }
+  .feedback.good{ background:var(--green-bg); border:1px solid var(--green); color:#BFEFCB; }
+  .feedback.bad{ background:var(--red-bg); border:1px solid var(--red); color:#F6C9C9; }
+  .feedback b{ display:block; margin-bottom:4px; font-size:14px; }
+
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
+
+  .nav-row{
+    display:flex;
+    justify-content:flex-end;
+    margin-top:24px;
+  }
+  button.primary{
+    background:var(--orange);
+    color:#fff;
+    border:none;
+    font-size:15px;
+    font-weight:700;
+    padding:12px 26px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:background .15s ease, transform .1s ease;
+  }
+  button.primary:hover:not(:disabled){ background:#F0722E; }
+  button.primary:disabled{
+    background:#3A4A63;
+    color:#8496AC;
+    cursor:not-allowed;
+  }
+  button.ghost{
+    background:transparent;
+    border:1.5px solid var(--panel-border);
+    color:var(--text);
+    font-size:14px;
+    font-weight:600;
+    padding:10px 20px;
+    border-radius:10px;
+    cursor:pointer;
+  }
+  button.ghost:hover{ border-color:var(--orange-light); }
+
+  /* results */
+  .results-hero{
+    text-align:center;
+    padding:36px 20px 30px;
+  }
+  .score-ring{
+    width:160px;height:160px;
+    margin:0 auto 18px;
+    border-radius:50%;
+    background:conic-gradient(var(--orange) calc(var(--pct,0)*1%), var(--navy2) 0);
+    display:flex;align-items:center;justify-content:center;
+    position:relative;
+  }
+  .score-ring::before{
+    content:"";
+    position:absolute;
+    width:126px;height:126px;
+    border-radius:50%;
+    background:var(--panel);
+  }
+  .score-ring-text{
+    position:relative;
+    text-align:center;
+  }
+  .score-ring-text .big{ font-size:32px; font-weight:800; display:block; }
+  .score-ring-text .small{ font-size:12px; color:var(--muted); }
+  .results-title{ font-size:22px; font-weight:800; margin:6px 0; }
+  .results-sub{ color:var(--muted); font-size:14px; margin-bottom:6px; }
+
+  .section-title{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+    color:var(--orange-light);
+    font-weight:700;
+    margin:30px 0 14px;
+  }
+  .review-item{
+    background:var(--navy2);
+    border:1px solid var(--panel-border);
+    border-radius:12px;
+    padding:16px 18px;
+    margin-bottom:10px;
+  }
+  .review-item .rq{ font-size:14px; font-weight:700; margin-bottom:8px; }
+  .review-tag{
+    display:inline-block;
+    font-size:11px;
+    font-weight:700;
+    padding:3px 9px;
+    border-radius:99px;
+    margin-right:8px;
+    vertical-align:middle;
+  }
+  .review-tag.good{ background:var(--green-bg); color:#8FE0AA; border:1px solid var(--green); }
+  .review-tag.bad{ background:var(--red-bg); color:#F6A0A0; border:1px solid var(--red); }
+  .review-explain{ font-size:13px; color:var(--muted); margin-top:6px; line-height:1.5; }
+  .review-answer{ font-size:13px; color:var(--text); margin-top:6px; }
+  .review-answer b{ color:var(--orange-light); }
+
+  .actions-row{
+    display:flex;
+    justify-content:center;
+    gap:12px;
+    margin-top:30px;
+  }
+
+  footer{
+    text-align:center;
+    color:#5B6B7C;
+    font-size:12px;
+    margin-top:34px;
+  }
+
+  @media (max-width:480px){
+    .card{padding:20px;}
+    h1{font-size:22px;}
+    .q-prompt{font-size:17px;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="kicker">PySpark for Learners</div>
+    <h1>Deep Dive Quiz: RDDs, Regression &amp; Classification</h1>
+    <p class="subtitle">30 scenario-based questions · no time limit · score shown at the end</p>
+  </header>
+
+  <div id="quiz-screen">
+    <div class="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-label" id="progressLabel">Question 1 / 30</div>
+      <div class="score-chip" id="scoreChip">Score: 0 / 0</div>
+    </div>
+
+    <div class="card">
+      <div class="q-number" id="qNumber">Question 1</div>
+      <p class="q-prompt" id="qPrompt"></p>
+      <div class="options" id="optionsWrap"></div>
+      <div class="feedback" id="feedback"></div>
+      <div class="nav-row">
+        <button class="primary" id="nextBtn" disabled>Next Question</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="results-screen" style="display:none;">
+    <div class="card results-hero">
+      <div class="score-ring" id="scoreRing">
+        <div class="score-ring-text">
+          <span class="big" id="scorePct">0%</span>
+          <span class="small" id="scoreFrac">0 / 30 correct</span>
+        </div>
+      </div>
+      <div class="results-title" id="resultsTitle">Nice work!</div>
+      <div class="results-sub" id="resultsSub"></div>
+      <div class="actions-row">
+        <button class="primary" id="retakeBtn">Retake Quiz</button>
+        <button class="ghost" id="reviewBtn">Jump to Review</button>
+      </div>
+    </div>
+
+    <div id="reviewSection">
+      <div class="section-title">Review</div>
+      <div id="reviewList"></div>
+    </div>
+  </div>
+
+  <footer>Built for teaching PySpark RDDs &amp; MLlib · covers the three companion notebooks</footer>
+</div>
+
+<script>
+const QUESTIONS = [
+  {q:"You run movies_rdd.map(lambda m: m.title()) in a notebook cell and nothing prints out. What's going on?",
+   opts:["Spark hit an error but suppressed it","map is a transformation — it's lazy and won't run until an action is called","movies_rdd is empty","You need to restart the kernel"],
+   correct:1, exp:"Transformations like map build a plan but don't execute. You need an action (e.g. .collect()) to actually trigger computation."},
+  {q:"Your dataset has millions of rows, but you just want a quick peek at the first 3 results without processing everything. Which method fits best?",
+   opts:["collect()","filter()","take(3)","distinct()"],
+   correct:2, exp:"take(n) is like SQL's LIMIT — Spark can often satisfy it using only part of the data, without processing every partition."},
+  {q:"You want to remove duplicate movie titles from your RDD before counting unique entries. Which transformation do you reach for?",
+   opts:["distinct()","sample()","map()","take()"],
+   correct:0, exp:"distinct() returns only unique values in the RDD — a transformation, so it still needs an action like collect() or count() to run."},
+  {q:"Which of these actually triggers Spark to compute and return a result?",
+   opts:["map()","filter()","collect()","sample()"],
+   correct:2, exp:"collect() is an action — it kicks off execution across the cluster and pulls all results back to the driver."},
+  {q:'You see .setMaster("local[2]") in the SparkConf setup. What does this configure?',
+   opts:["Connects to 2 remote clusters","Runs Spark locally using 2 CPU cores","Limits the dataset to 2 partitions max","Sets a 2-second timeout"],
+   correct:1, exp:"local[2] tells Spark to simulate a cluster on your own machine using 2 cores, useful for learning without a real cluster."},
+  {q:"You have a plain Python list of movie names and want Spark to work with it in parallel. What do you call?",
+   opts:["sc.parallelize(movies)","sc.distribute(movies)","sc.map(movies)","sc.collect(movies)"],
+   correct:0, exp:"parallelize() takes a local Python collection and splits it into partitions distributed across the cluster's cores."},
+  {q:"movies_rdd.filter(lambda m: m[0] == 'd') is applied to ['dark knight', 'dunkirk', 'avatar']. What does it keep?",
+   opts:["Only 'avatar'","'dark knight' and 'dunkirk'","All three movies","None — filter needs collect() first to work"],
+   correct:1, exp:"filter keeps only elements where the lambda returns True — here, titles starting with 'd'."},
+  {q:"A colleague asks why Spark waits until collect() instead of running map() immediately when called. What's the best answer?",
+   opts:["It's a bug in older Spark versions","So it can see the full chain of steps and compute only what's needed for the final result","Because map() requires internet access","Python doesn't support immediate execution"],
+   correct:1, exp:"Laziness lets Spark's optimizer plan the whole job at once — critical for efficiency on huge distributed datasets."},
+  {q:"movies_rdd.sample(fraction=0.5, withReplacement=False).collect() is run. What should you expect?",
+   opts:["Exactly half the movies, always the same ones","A random ~50% subset of the movies","All movies duplicated","An error, since sample needs a seed"],
+   correct:1, exp:"sample() pulls a random subset at roughly the given fraction; withReplacement=False means no movie can be picked twice."},
+  {q:"How would you best describe SparkContext (sc) to a new learner?",
+   opts:["A Python list wrapper","The entry point / connection to the Spark cluster that RDDs are created from","A visualization library","A file format for storing data"],
+   correct:1, exp:"Everything RDD-related in classic Spark starts from SparkContext — it's the bridge between your code and the cluster."},
+  {q:"Before training a regression model on the Boston housing data, why is VectorAssembler used on columns like 'crim', 'zn', 'rm', etc.?",
+   opts:["To delete unused columns","To combine multiple numeric columns into one single 'features' vector column the model expects","To convert text to numbers","To normalize all values to 0-1"],
+   correct:1, exp:"Spark ML models expect one vector column of features, not many separate columns — VectorAssembler packs them together."},
+  {q:"In LinearRegression(featuresCol='features', labelCol='medv'), what role does 'medv' play?",
+   opts:["It's an input feature like the others","It's the label — the value the model is trying to predict","It's the model's name","It's a random seed"],
+   correct:1, exp:"labelCol tells Spark which column holds the ground-truth value (here, median house value) that the model learns to predict."},
+  {q:"Why does the notebook run vhouse_df.randomSplit([0.7, 0.3]) before training?",
+   opts:["To speed up loading the CSV","To create separate train and test sets, so the model can be evaluated on data it hasn't seen","To remove missing values","To convert text columns to numbers"],
+   correct:1, exp:"Splitting into train/test lets you honestly evaluate the model on unseen data instead of data it memorized during training."},
+  {q:"What does lr_model = lr.fit(train_df) actually do?",
+   opts:["Generates predictions on train_df","Trains the model, learning coefficients from the training data","Evaluates the model's accuracy","Loads the dataset from disk"],
+   correct:1, exp:"fit() is the training step — it learns the model's parameters (like coefficients) from the training data."},
+  {q:"After training, the notebook calls lr_model.transform(test_df). What is this step doing?",
+   opts:["Re-training the model on test data","Generating predictions on the test set using the already-fitted model","Deleting the test data","Computing RMSE directly"],
+   correct:1, exp:"transform() applies an already-trained model to new data to produce predictions — it doesn't retrain anything."},
+  {q:"Two regression models are compared: Model A has RMSE = 3.2, Model B has RMSE = 5.8. Which one is making better predictions?",
+   opts:["Model A — lower RMSE means smaller average error","Model B — higher RMSE means stronger predictions","They're equal, RMSE doesn't indicate quality","Impossible to tell without R2"],
+   correct:0, exp:"RMSE measures average prediction error in the same units as the target — lower is better."},
+  {q:"A model reports r2 = 0.91 on the test set. How should a learner interpret this?",
+   opts:["The model is wrong 91% of the time","The model explains about 91% of the variance in the target variable","91% of rows had missing values","The model used 91 iterations"],
+   correct:1, exp:"R² (closer to 1 is better) represents the proportion of variance in the label that the model's predictions explain."},
+  {q:"After trying Linear Regression, the notebook also tries DecisionTreeRegressor. What's the main motivation for trying a tree-based model?",
+   opts:["Trees train faster than linear models on any dataset","Trees can capture non-linear relationships that a straight-line model would miss","Trees don't require a train/test split","Trees always outperform linear models"],
+   correct:1, exp:"Decision trees split on feature thresholds, letting them model non-linear patterns that linear regression's straight-line assumption can't capture."},
+  {q:"GBTRegressor (Gradient-Boosted Trees) is introduced after the single decision tree. What's the key idea behind it?",
+   opts:["It trains one very deep tree instead of several","It builds many small trees sequentially, each one correcting the errors of the previous trees","It ignores the label column entirely","It's identical to linear regression but slower"],
+   correct:1, exp:"Gradient boosting builds trees one at a time, with each new tree focused on fixing the mistakes of the ensemble so far — usually improving accuracy at the cost of training time."},
+  {q:"RegressionEvaluator(predictionCol='prediction', labelCol='medv', metricName='r2') is used to evaluate a model. What is it measuring?",
+   opts:["How long training took","The R-squared score comparing predictions to actual medv values","The number of features used","The size of the dataset"],
+   correct:1, exp:"RegressionEvaluator computes the chosen metric (here r2) by comparing the prediction column against the true label column."},
+  {q:"The bank dataset has a 'job' column with values like 'admin', 'technician', 'blue-collar'. Why can't this go straight into a LogisticRegression model?",
+   opts:["The column has too many rows","Spark ML models only work with numeric input, not raw text","'job' isn't a valid column name","Logistic regression can't use categorical data at all, even after encoding"],
+   correct:1, exp:"Machine learning models operate on numbers, so text categories must be converted first — that's what StringIndexer and OneHotEncoder are for."},
+  {q:"StringIndexer(inputCol='job', outputCol='jobIndex') is applied. What does it produce?",
+   opts:["A one-hot encoded vector","An integer code for each distinct text category (e.g. 'admin' → 0, 'technician' → 1)","A count of how many times each job appears","A sorted alphabetical list of jobs"],
+   correct:1, exp:"StringIndexer maps each distinct string value to a numeric index — the first step in preparing categorical data."},
+  {q:"After StringIndexer assigns 'admin'=0, 'technician'=1, 'blue-collar'=2, why is OneHotEncoder applied next instead of feeding those numbers directly into the model?",
+   opts:["To make the numbers larger","To avoid implying a false order or ranking between categories that have no natural order","To reduce the number of rows","OneHotEncoder isn't necessary — StringIndexer output alone is fine"],
+   correct:1, exp:"Without one-hot encoding, a model might wrongly assume 'blue-collar' (2) > 'technician' (1) > 'admin' (0) in some meaningful sense — one-hot vectors avoid that false ordering."},
+  {q:"The notebook bundles StringIndexer, OneHotEncoder, and VectorAssembler steps into Pipeline(stages=stages). What's the benefit of doing this?",
+   opts:["It runs the steps in a random order for variety","It packages all preprocessing steps into one reusable object, applying them consistently to any dataset","It skips the need for a train/test split","It removes the need for a label column"],
+   correct:1, exp:"A Pipeline chains preprocessing steps together so .fit()/.transform() apply the exact same transformations consistently — critical for treating train and test data identically."},
+  {q:"train, test = df.randomSplit([0.7, 0.3], seed=2018) — what is the purpose of seed=2018 specifically?",
+   opts:["It sets the training start year","It makes the 'random' split reproducible — the same split every time the code runs","It limits training to 2018 rows","It has no real effect"],
+   correct:1, exp:"A fixed seed ensures randomSplit produces the same train/test division on every run, which is useful for reproducible experiments."},
+  {q:"The bank dataset's target is 'deposit' (yes/no), converted into a 'label' column. What kind of model is being trained here?",
+   opts:["A regression model predicting a continuous number","A binary classification model predicting one of two outcomes","A clustering model with no labels","A recommendation system"],
+   correct:1, exp:"Since 'deposit' has only two possible values (yes/no), this is a binary classification problem — predicting one of two classes."},
+  {q:"The notebook plots trainingSummary.roc — an ROC curve. What two things does it plot against each other?",
+   opts:["Training time vs. accuracy","True Positive Rate vs. False Positive Rate at different thresholds","Number of features vs. R2","RMSE vs. iterations"],
+   correct:1, exp:"The ROC curve shows the tradeoff between correctly identifying positives (TPR) and incorrectly flagging negatives (FPR) as the decision threshold changes."},
+  {q:"A model reports areaUnderROC = 0.50 on the test set. What does that tell you?",
+   opts:["The model is performing extremely well","The model is performing no better than random guessing","Half the predictions are missing","The model needs more decimal precision"],
+   correct:1, exp:"AUC of 0.5 means the classifier has no discriminative power — equivalent to flipping a coin. AUC of 1.0 would mean a perfect classifier."},
+  {q:"DecisionTreeClassifier(featuresCol='features', labelCol='label', maxDepth=3) is used. What does maxDepth control?",
+   opts:["How many features the model can use","How many levels of splits the tree is allowed to have","How many rows are in the training set","The number of trees trained"],
+   correct:1, exp:"maxDepth limits how many sequential splits the tree can make — a shallow tree (like depth 3) stays simple and interpretable, avoiding overfitting."},
+  {q:"RandomForestClassifier is tried after the single Decision Tree. What's the key improvement it offers?",
+   opts:["It trains a single, deeper tree than the decision tree model","It trains many trees on random subsets of data/features and averages their votes, making it more robust and less prone to overfitting","It removes the need for a label column","It only works on numeric-only datasets with no categorical features"],
+   correct:1, exp:"Random Forest builds an ensemble of trees trained on random subsets, then combines their predictions — this averaging reduces overfitting compared to any single tree."}
+];
+
+const LETTERS = ["A","B","C","D","E"];
+let current = 0;
+let score = 0;
+let answers = new Array(QUESTIONS.length).fill(null); // stores chosen index
+let answered = new Array(QUESTIONS.length).fill(false);
+
+const qNumber = document.getElementById('qNumber');
+const qPrompt = document.getElementById('qPrompt');
+const optionsWrap = document.getElementById('optionsWrap');
+const feedback = document.getElementById('feedback');
+const nextBtn = document.getElementById('nextBtn');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+const scoreChip = document.getElementById('scoreChip');
+
+function renderQuestion(){
+  const item = QUESTIONS[current];
+  qNumber.textContent = "Question " + (current+1);
+  qPrompt.textContent = item.q;
+  optionsWrap.innerHTML = "";
+  feedback.className = "feedback";
+  feedback.innerHTML = "";
+
+  item.opts.forEach((optText, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'option';
+    btn.innerHTML = '<span class="option-letter">'+LETTERS[idx]+'</span><span>'+optText+'</span>';
+    btn.addEventListener('click', () => selectOption(idx));
+    optionsWrap.appendChild(btn);
+  });
+
+  progressFill.style.width = ((current)/QUESTIONS.length*100) + "%";
+  progressLabel.textContent = "Question " + (current+1) + " / " + QUESTIONS.length;
+  scoreChip.textContent = "Score: " + score + " / " + current;
+
+  nextBtn.disabled = true;
+  nextBtn.textContent = (current === QUESTIONS.length-1) ? "Finish Quiz" : "Next Question";
+
+  // If already answered (e.g. navigating back isn't supported, but keep safe)
+  if(answered[current]){
+    lockOptions(answers[current]);
+  }
+}
+
+function selectOption(idx){
+  if(answered[current]) return;
+  const item = QUESTIONS[current];
+  answered[current] = true;
+  answers[current] = idx;
+  if(idx === item.correct) score++;
+  lockOptions(idx);
+  nextBtn.disabled = false;
+}
+
+function lockOptions(chosenIdx){
+  const item = QUESTIONS[current];
+  const optionEls = optionsWrap.querySelectorAll('.option');
+  optionEls.forEach((el, idx) => {
+    el.disabled = true;
+    if(idx === item.correct){
+      el.classList.add('correct');
+    }
+    if(idx === chosenIdx && idx !== item.correct){
+      el.classList.add('incorrect');
+    }
+    if(idx === chosenIdx){
+      el.classList.add('selected');
+    }
+  });
+
+  const isCorrect = chosenIdx === item.correct;
+  feedback.className = "feedback show " + (isCorrect ? "good" : "bad");
+  feedback.innerHTML = "<b>" + (isCorrect ? "Correct!" : "Not quite.") + "</b>" + item.exp;
+  scoreChip.textContent = "Score: " + score + " / " + (current+1);
+}
+
+nextBtn.addEventListener('click', () => {
+  if(current < QUESTIONS.length - 1){
+    current++;
+    renderQuestion();
+  } else {
+    showResults();
+  }
+});
+
+function showResults(){
+  document.getElementById('quiz-screen').style.display = 'none';
+  const resultsScreen = document.getElementById('results-screen');
+  resultsScreen.style.display = 'block';
+
+  const pct = Math.round((score/QUESTIONS.length)*100);
+  document.getElementById('scoreRing').style.setProperty('--pct', pct);
+  document.getElementById('scorePct').textContent = pct + "%";
+  document.getElementById('scoreFrac').textContent = score + " / " + QUESTIONS.length + " correct";
+
+  let title, sub;
+  if(pct >= 90){ title = "Outstanding! 🔥"; sub = "You've got a strong grasp of RDDs and MLlib."; }
+  else if(pct >= 70){ title = "Solid work!"; sub = "You know the core patterns — review the misses below."; }
+  else if(pct >= 50){ title = "Good start."; sub = "Worth revisiting the notebooks alongside the slide deck."; }
+  else { title = "Keep going."; sub = "Re-watch the walkthrough, then retake the quiz."; }
+  document.getElementById('resultsTitle').textContent = title;
+  document.getElementById('resultsSub').textContent = sub;
+
+  const reviewList = document.getElementById('reviewList');
+  reviewList.innerHTML = "";
+  QUESTIONS.forEach((item, idx) => {
+    const chosen = answers[idx];
+    const isCorrect = chosen === item.correct;
+    const div = document.createElement('div');
+    div.className = 'review-item';
+    div.innerHTML =
+      '<span class="review-tag ' + (isCorrect ? 'good' : 'bad') + '">' + (isCorrect ? 'Correct' : 'Missed') + '</span>' +
+      '<span class="rq">Q' + (idx+1) + '. ' + item.q + '</span>' +
+      (!isCorrect ? '<div class="review-answer">Your answer: <b>' + LETTERS[chosen] + '. ' + item.opts[chosen] + '</b></div>' : '') +
+      '<div class="review-answer">Correct answer: <b>' + LETTERS[item.correct] + '. ' + item.opts[item.correct] + '</b></div>' +
+      '<div class="review-explain">' + item.exp + '</div>';
+    reviewList.appendChild(div);
+  });
+}
+
+document.getElementById('retakeBtn').addEventListener('click', () => {
+  current = 0; score = 0;
+  answers = new Array(QUESTIONS.length).fill(null);
+  answered = new Array(QUESTIONS.length).fill(false);
+  document.getElementById('results-screen').style.display = 'none';
+  document.getElementById('quiz-screen').style.display = 'block';
+  renderQuestion();
+});
+
+document.getElementById('reviewBtn').addEventListener('click', () => {
+  document.getElementById('reviewSection').scrollIntoView({behavior:'smooth'});
+});
+
+renderQuestion();
+</script>
+</body>
+</html>
